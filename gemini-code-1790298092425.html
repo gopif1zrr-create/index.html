@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Lighting Console & 3D Visualizer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #0f172a; font-family: sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    </style>
+</head>
+<body class="text-slate-200">
+
+    <!-- 3D Viewport -->
+    <div id="canvas-container"></div>
+
+    <!-- Control Console Panel -->
+    <div class="fixed top-4 left-4 bottom-4 w-96 bg-slate-900/90 backdrop-blur-md border border-slate-700/50 rounded-xl p-4 flex flex-col z-10 shadow-2xl custom-scrollbar overflow-y-auto">
+        <h1 class="text-xl font-bold text-amber-400 mb-1 flex items-center gap-2">
+            💡 Lighting Console
+        </h1>
+        <p class="text-xs text-slate-400 mb-4">DMX 512 & 3D Stage Visualizer Controller</p>
+
+        <!-- Fixture Selection -->
+        <div class="mb-4">
+            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Pilih Fixture Lampu</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="select-beam" class="py-2 px-3 bg-amber-500/20 border border-amber-500/50 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/30 transition">Moving Beam</button>
+                <button id="select-par" class="py-2 px-3 bg-slate-800 border border-slate-700 text-slate-400 rounded-lg text-sm font-medium hover:bg-slate-700 transition">Par LED</button>
+            </div>
+        </div>
+
+        <!-- Master Dimmer -->
+        <div class="mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+            <div class="flex justify-between items-center mb-1">
+                <span class="text-xs font-semibold text-amber-400">Master Dimmer</span>
+                <span id="val-master" class="text-xs font-mono">100%</span>
+            </div>
+            <input type="range" id="param-master" min="0" max="100" value="100" class="w-full accent-amber-500">
+        </div>
+
+        <!-- Color & Intensity -->
+        <div class="mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 space-y-3">
+            <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Output Warna & Terang</h2>
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-300">Warna Sinar (RGB)</span>
+                <input type="color" id="param-color" value="#ffffff" class="w-8 h-8 rounded border-0 cursor-pointer bg-transparent">
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs text-slate-400">Intensitas Light</span>
+                    <span id="val-intensity" class="text-xs font-mono">100%</span>
+                </div>
+                <input type="range" id="param-intensity" min="0" max="100" value="100" class="w-full accent-amber-500">
+            </div>
+        </div>
+
+        <!-- Transform Controls (Position & Scale) -->
+        <div class="mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 space-y-3">
+            <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Posisi & Skala Rigging</h2>
+            
+            <!-- Posisi X, Y, Z -->
+            <div class="space-y-2">
+                <div>
+                    <div class="flex justify-between items-center text-xs mb-1">
+                        <span class="text-slate-400">Posisi X (Kiri / Kanan)</span>
+                        <span id="val-posX" class="font-mono">0.0</span>
+                    </div>
+                    <input type="range" id="param-posX" min="-10" max="10" step="0.1" value="0" class="w-full accent-blue-500">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center text-xs mb-1">
+                        <span class="text-slate-400">Posisi Y (Atas / Bawah)</span>
+                        <span id="val-posY" class="font-mono">6.5</span>
+                    </div>
+                    <input type="range" id="param-posY" min="2" max="12" step="0.1" value="6.5" class="w-full accent-blue-500">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center text-xs mb-1">
+                        <span class="text-slate-400">Posisi Z (Maju / Mundur)</span>
+                        <span id="val-posZ" class="font-mono">0.0</span>
+                    </div>
+                    <input type="range" id="param-posZ" min="-10" max="10" step="0.1" value="0" class="w-full accent-blue-500">
+                </div>
+            </div>
+
+            <!-- Skala / Ukuran -->
+            <div>
+                <div class="flex justify-between items-center text-xs mb-1">
+                    <span class="text-slate-400">Skala Ukuran Fixture</span>
+                    <span id="val-scale" class="font-mono">1.0x</span>
+                </div>
+                <input type="range" id="param-scale" min="0.5" max="2.5" step="0.1" value="1" class="w-full accent-emerald-500">
+            </div>
+        </div>
+
+        <!-- Pan & Tilt (Moving Head Only) -->
+        <div id="pan-tilt-box" class="mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 space-y-3">
+            <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Rotasi Pan & Tilt (Beam)</h2>
+            <div>
+                <div class="flex justify-between items-center text-xs mb-1">
+                    <span class="text-slate-400">Pan (Horizontal 540°)</span>
+                    <span id="val-pan" class="font-mono">0°</span>
+                </div>
+                <input type="range" id="param-pan" min="-270" max="270" value="0" class="w-full accent-purple-500">
+            </div>
+            <div>
+                <div class="flex justify-between items-center text-xs mb-1">
+                    <span class="text-slate-400">Tilt (Vertikal 270°)</span>
+                    <span id="val-tilt" class="font-mono">0°</span>
+                </div>
+                <input type="range" id="param-tilt" min="-135" max="135" value="0" class="w-full accent-purple-500">
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Logic 3D & DMX Console -->
+    <script>
+        // Setup 3D Scene
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x0f172a, 0.03);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 12);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 3, 0);
+
+        // Stage Floor & Rigging Truss
+        const floorGeo = new THREE.PlaneGeometry(30, 30);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const grid = new THREE.GridHelper(30, 30, 0x334155, 0x1e293b);
+        grid.position.y = 0.01;
+        scene.add(grid);
+
+        // Ambient Light
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
+        scene.add(ambientLight);
+
+        // Fixture Group Setup
+        const fixtureGroup = new THREE.Group();
+        fixtureGroup.position.set(0, 6.5, 0);
+        scene.add(fixtureGroup);
+
+        // Create Moving Beam Head Model
+        const beamModel = new THREE.Group();
+        const baseGeo = new THREE.CylinderGeometry(0.5, 0.6, 0.3, 16);
+        const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8 });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        beamModel.add(base);
+
+        const yokeGeo = new THREE.BoxGeometry(0.2, 0.8, 0.8);
+        const yoke = new THREE.Mesh(yokeGeo, baseMat);
+        yoke.position.y = -0.5;
+        beamModel.add(yoke);
+
+        const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.5 });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.y = -0.9;
+        beamModel.add(head);
+
+        fixtureGroup.add(beamModel);
+
+        // Spotlight (Sinar Lampu)
+        const spotLight = new THREE.SpotLight(0xffffff, 5);
+        spotLight.position.set(0, -0.9, 0);
+        spotLight.angle = Math.PI / 8;
+        spotLight.penumbra = 0.3;
+        spotLight.castShadow = true;
+        
+        const lightTarget = new THREE.Object3D();
+        lightTarget.position.set(0, -10, 0);
+        scene.add(lightTarget);
+        spotLight.target = lightTarget;
+
+        beamModel.add(spotLight);
+
+        // Controls State & Event Listeners
+        let masterDimmer = 1.0;
+        let baseIntensity = 5;
+
+        function updateLight() {
+            const colorVal = document.getElementById('param-color').value;
+            const intensityVal = document.getElementById('param-intensity').value / 100;
+            masterDimmer = document.getElementById('param-master').value / 100;
+
+            spotLight.color.set(colorVal);
+            spotLight.intensity = baseIntensity * intensityVal * masterDimmer;
+        }
+
+        // Event Handler Baut UI Sliders
+        document.getElementById('param-master').addEventListener('input', (e) => {
+            document.getElementById('val-master').innerText = `${e.target.value}%`;
+            updateLight();
+        });
+
+        document.getElementById('param-intensity').addEventListener('input', (e) => {
+            document.getElementById('val-intensity').innerText = `${e.target.value}%`;
+            updateLight();
+        });
+
+        document.getElementById('param-color').addEventListener('input', updateLight);
+
+        // Transform Controls
+        document.getElementById('param-posX').addEventListener('input', (e) => {
+            fixtureGroup.position.x = parseFloat(e.target.value);
+            lightTarget.position.x = parseFloat(e.target.value);
+            document.getElementById('val-posX').innerText = e.target.value;
+        });
+
+        document.getElementById('param-posY').addEventListener('input', (e) => {
+            fixtureGroup.position.y = parseFloat(e.target.value);
+            document.getElementById('val-posY').innerText = e.target.value;
+        });
+
+        document.getElementById('param-posZ').addEventListener('input', (e) => {
+            fixtureGroup.position.z = parseFloat(e.target.value);
+            lightTarget.position.z = parseFloat(e.target.value);
+            document.getElementById('val-posZ').innerText = e.target.value;
+        });
+
+        document.getElementById('param-scale').addEventListener('input', (e) => {
+            const scale = parseFloat(e.target.value);
+            fixtureGroup.scale.set(scale, scale, scale);
+            document.getElementById('val-scale').innerText = `${scale}x`;
+        });
+
+        // Pan & Tilt
+        document.getElementById('param-pan').addEventListener('input', (e) => {
+            const rad = (parseFloat(e.target.value) * Math.PI) / 180;
+            beamModel.rotation.y = rad;
+            document.getElementById('val-pan').innerText = `${e.target.value}°`;
+        });
+
+        document.getElementById('param-tilt').addEventListener('input', (e) => {
+            const rad = (parseFloat(e.target.value) * Math.PI) / 180;
+            beamModel.rotation.x = rad;
+            document.getElementById('val-tilt').innerText = `${e.target.value}°`;
+        });
+
+        // Render Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Responsive Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
